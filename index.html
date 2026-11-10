@@ -400,6 +400,7 @@ td .btn{padding:5px 10px;font-size:12px} td.right{white-space:nowrap}
 .mv-chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}.mv-chips .chip{font:inherit;font-size:13px;font-weight:600;color:var(--text)}.mv-chips .chip.on{color:var(--on-brand)}.mv-chips .chip small{font-weight:400;opacity:.75}
 .mv-warn{margin-top:10px;padding:10px 12px;border-radius:12px;background:rgba(220,60,40,.12);color:var(--danger);font-size:14px}
 .mv-notify{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:14px;text-transform:none;letter-spacing:0;font-family:inherit}.mv-notify input{width:auto;margin:0}
+.auth-invite{margin:12px 0 0;padding:10px 12px;border-radius:12px;background:var(--brand-soft);font-size:14px;line-height:1.4}.auth-invite code{font:700 13px var(--f-mono);letter-spacing:.08em}
 </style>
 </head>
 <body>
@@ -2189,7 +2190,7 @@ async function migCommit(){const P=migPlan();if(!P.joined&&!P.added)return;CS.no
     let fs=[];try{fs=await _dbAll();}catch(e){}let n=0;for(const f of fs){if(skip.has(f.clientId))continue;if(P.map[f.clientId])f.clientId=P.map[f.clientId];if((DB.files||[]).some(m=>m.id===f.id))continue;try{await dbPut(f);n++;}catch(e){}}if(n)toast(`Ανέβηκαν ${n} αρχεία`);}
   else for(const x of (MIG.files||[])){if(skip.has(x.clientId)||(DB.files||[]).some(m=>m.id===x.id))continue;try{const bin=atob(x.b64);const u8=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i);await dbPut({...x,clientId:P.map[x.clientId]||x.clientId,b64:undefined,blob:new Blob([u8],{type:x.type})});}catch(e){console.warn(e);}}
   const src=MIG.src;MIG=null;renderImport();
-  if(src==='legacy'&&/github\.io$/.test(location.hostname)&&await ask('Η μεταφορά έγινε. Από εδώ και πέρα άνοιγε την εφαρμογή από το healing-steps.vercel.app (και πρόσθεσέ τη στην αρχική οθόνη).',{title:'Έτοιμο',ok:'Άνοιγμα τώρα',cancel:'Αργότερα',danger:false}))location.href='https://healing-steps.vercel.app/';}
+  if(false&&await ask('Η μεταφορά έγινε. Από εδώ και πέρα άνοιγε την εφαρμογή από το healing-steps.vercel.app (και πρόσθεσέ τη στην αρχική οθόνη).',{title:'Έτοιμο',ok:'Άνοιγμα τώρα',cancel:'Αργότερα',danger:false}))location.href='https://healing-steps.vercel.app/';}
 function renderImport(){const b=$('legacyBox');if(!b)return;const P=CLOUD_ON&&CS.practice?legacyPending():null;
   b.innerHTML=P?`<div class="banner card" style="margin:0 0 10px;padding:10px 12px"><b>Βρέθηκαν δεδομένα της παλιάς εφαρμογής</b><div class="small muted">${(P.d.clients||[]).length} πελάτες · ${P.r.q} ιατρικά ιστορικά · ${(P.d.expenses||[]).length} έξοδα</div><button class="btn sm primary" style="margin-top:8px" onclick="offerLegacy(true)">🔎 Έλεγχος & μεταφορά</button></div>`:'';}
 function h53(str){let h1=0xdeadbeef,h2=0x41c6ce57;for(let i=0;i<str.length;i++){const ch=str.charCodeAt(i);h1=Math.imul(h1^ch,2654435761);h2=Math.imul(h2^ch,1597334677);}
@@ -2260,14 +2261,20 @@ const AUTH_ERR=e=>{const m=(e&&e.message)||String(e);if(/Invalid login/i.test(m)
   if(/rate limit/i.test(m))return 'Πολλές προσπάθειες — δοκίμασε ξανά σε λίγα λεπτά.';if(/bad_code/.test(m))return 'Ο κωδικός πρόσκλησης δεν βρέθηκε.';if(/practice_full/.test(m))return 'Το ιατρείο έχει συμπληρώσει τους χρήστες του — ο διαχειριστής μπορεί να αφαιρέσει κάποιον από τις Ρυθμίσεις.';
   if(/already_member/.test(m))return 'Ο λογαριασμός ανήκει ήδη σε ιατρείο.';if(/Failed to fetch|NetworkError/i.test(m))return 'Δεν υπάρχει σύνδεση στο internet.';return m;};
 let authMode='login';
-function showAuth(mode){authMode=mode||'login';$('auth').classList.add('open');$('authForm').hidden=false;$('setupBox').hidden=true;
+/* ---- πρόσκληση με link: ?invite=ΚΩΔΙΚΟΣ ---- */
+const INV_KEY='hs_invite';
+(function(){try{const u=new URL(location.href),c=(u.searchParams.get('invite')||'').trim().toUpperCase();if(c){localStorage.setItem(INV_KEY,c);u.searchParams.delete('invite');history.replaceState(null,'',u.pathname+(u.search||'')+u.hash);}}catch(e){}})();
+const pendingInvite=()=>{try{return localStorage.getItem(INV_KEY)||'';}catch(e){return '';}};
+const clearInvite=()=>{try{localStorage.removeItem(INV_KEY);}catch(e){}};
+
+function showAuth(mode){const inv=pendingInvite();if(inv&&!mode)mode='signup';authMode=mode||'login';{let b=$('authInvite');if(!b){b=document.createElement('div');b.id='authInvite';b.className='auth-invite';$('authForm').before(b);}b.hidden=!inv;b.innerHTML=inv?`📩 <b>Έχεις πρόσκληση</b> για ιατρείο (κωδικός <code>${esc(inv)}</code>). ${authMode==='signup'?'Φτιάξε λογαριασμό με το email σου':'Συνδέσου'} και θα μπεις αυτόματα.`:'';}$('auth').classList.add('open');$('authForm').hidden=false;$('setupBox').hidden=true;
   $('authTitle').textContent=authMode==='signup'?'Νέος λογαριασμός':'Σύνδεση';$('authGo').textContent=authMode==='signup'?'Δημιουργία λογαριασμού':'Σύνδεση';
   $('authSwitch').innerHTML=authMode==='signup'?'Έχεις ήδη λογαριασμό; <a href="#" onclick="showAuth(\'login\');return false">Σύνδεση</a>':'Πρώτη φορά; <a href="#" onclick="showAuth(\'signup\');return false">Δημιουργία λογαριασμού</a>';
   $('authForgot').hidden=authMode==='signup';$('authPass').autocomplete=authMode==='signup'?'new-password':'current-password';authMsg('');setTimeout(()=>$('authEmail').focus(),60);}
 function hideAuth(){$('auth').classList.remove('open');}
 async function authSubmit(e){e.preventDefault();const email=$('authEmail').value.trim(),password=$('authPass').value;if(!email||!password)return authMsg('Συμπλήρωσε email και κωδικό.',1);
   const b=$('authGo');b.disabled=true;authMsg('…');
-  try{if(authMode==='signup'){if(password.length<8)throw new Error('Password should be at least 8');const {data,error}=await sb.auth.signUp({email,password,options:{emailRedirectTo:location.origin+location.pathname}});if(error)throw error;
+  try{if(authMode==='signup'){if(password.length<8)throw new Error('Password should be at least 8');const {data,error}=await sb.auth.signUp({email,password,options:{emailRedirectTo:location.origin+location.pathname+(pendingInvite()?'?invite='+encodeURIComponent(pendingInvite()):'')}});if(error)throw error;
       if(data.session){await afterLogin(data.session.user);}else{authMsg(`Σου στείλαμε email επιβεβαίωσης στο ${email}. Άνοιξε το link και μετά κάνε σύνδεση εδώ.`);showAuthModeLater();}}
     else{const {data,error}=await sb.auth.signInWithPassword({email,password});if(error)throw error;await afterLogin(data.user);}}
   catch(err){authMsg(AUTH_ERR(err),1);}finally{b.disabled=false;}}
@@ -2278,10 +2285,10 @@ async function recoverPassword(){const p=await askText('Γράψε νέο κωδ
   if(p.length<8){toast('Τουλάχιστον 8 χαρακτήρες');return recoverPassword();}const {error}=await sb.auth.updateUser({password:p});toast(error?AUTH_ERR(error):'Ο κωδικός άλλαξε');}
 
 /* ---- ιατρείο: δημιουργία ή συμμετοχή με κωδικό ---- */
-function showSetup(){$('auth').classList.add('open');$('authForm').hidden=true;$('setupBox').hidden=false;$('setupWho').textContent=CS.user?.email||'';$('setupName').value=DB.settings.name?`Healing Steps · ${DB.settings.name}`:'Healing Steps';authMsg('');}
+function showSetup(){const inv=pendingInvite();if(inv){$('setupCode').value=inv;setTimeout(()=>setupJoin(true),50);}$('auth').classList.add('open');$('authForm').hidden=true;$('setupBox').hidden=false;$('setupWho').textContent=CS.user?.email||'';$('setupName').value=DB.settings.name?`Healing Steps · ${DB.settings.name}`:'Healing Steps';authMsg('');}
 async function setupCreate(){try{const {data,error}=await sb.rpc('hs_create_practice',{p_name:$('setupName').value});if(error)throw error;hideAuth();await enterPractice(data,'owner',null);toast('Το ιατρείο δημιουργήθηκε');}catch(e){authMsg(AUTH_ERR(e),1);}}
-async function setupJoin(){const code=$('setupCode').value.trim();if(!code)return authMsg('Γράψε τον κωδικό πρόσκλησης.',1);
-  try{const {data,error}=await sb.rpc('hs_join_practice',{p_code:code});if(error)throw error;hideAuth();await enterPractice(data,'member',null);toast(`Μπήκες στο ιατρείο «${data.name}»`);}catch(e){authMsg(AUTH_ERR(e),1);}}
+async function setupJoin(auto){const code=$('setupCode').value.trim().toUpperCase();if(!code)return authMsg('Γράψε τον κωδικό πρόσκλησης.',1);if(auto)authMsg('Είσοδος στο ιατρείο με την πρόσκληση…');
+  try{const {data,error}=await sb.rpc('hs_join_practice',{p_code:code});if(error)throw error;clearInvite();hideAuth();await enterPractice(data,'member',null);toast(`Μπήκες στο ιατρείο «${data.name}»`);}catch(e){if(/bad_code/.test(e?.message||''))clearInvite();authMsg(AUTH_ERR(e),1);}}
 
 function freshDB(){const d={clients:[],sessions:[],packages:[],docs:[],expenses:[],settings:{name:'',fee:50,dur:50,tpl:'',msg:'sms',pin:'',theme:'auto',lastBackup:'',afm:'',doy:'',prof:'',lic:'',seat:'',rcptNo:1,vat:true,noShow:false,localHol:true}};d.settings.pin=DB.settings.pin;d.settings.theme=DB.settings.theme;return d;}
 async function afterLogin(user){CS.user=user;const meta=lsGet(META_KEY);let pr=null,role=null;
@@ -2314,8 +2321,8 @@ function renderCloud(){const box=$('cloudCard');if(!box)return;box.hidden=!CLOUD
     <div class="grid2" style="margin-top:6px"><div><label>Λογαριασμός</label><div>${esc(CS.user?.email||'')}</div></div><div><label>Ιατρείο</label><div>${esc(CS.practice.name)} · <span class="muted">${owner?'διαχειριστής':'μέλος'}</span></div></div></div>
     <label>Χρήστες (${CS.members.length}/${max})</label>
     ${CS.members.map(m=>`<div class="list-item"><div><b>${esc(m.email||'—')}</b> <span class="pill ${m.role==='owner'?'info':'gray'}">${m.role==='owner'?'διαχειριστής':'μέλος'}</span>${m.user_id===CS.user?.id?' <span class="small muted">(εσύ)</span>':''}</div>${owner&&m.role!=='owner'?`<button class="btn sm danger" onclick="removeMember('${m.user_id}')">Αφαίρεση</button>`:''}</div>`).join('')}
-    ${owner&&CS.members.length<max?`<div class="card" style="background:var(--brand-soft);margin:10px 0 0"><div class="small">Για να μπει ο 2ος χρήστης: φτιάχνει λογαριασμό στην εφαρμογή και γράφει αυτόν τον κωδικό πρόσκλησης.</div>
-      <div class="row" style="margin-top:8px"><span style="font:700 22px var(--f-mono);letter-spacing:.12em">${esc(CS.practice.invite_code||'')}</span><button class="btn sm" onclick="copyInvite()">Αντιγραφή</button><button class="btn sm ghost" onclick="newInvite()">Νέος κωδικός</button></div></div>`:''}
+    ${owner&&CS.members.length<max?`<div class="card" style="background:var(--brand-soft);margin:10px 0 0"><div class="small">Για να μπει νέος θεραπευτής: στείλε του το link πρόσκλησης — φτιάχνει λογαριασμό και μπαίνει αυτόματα. (Ή γράφει τον κωδικό μετά τη σύνδεση.)</div>
+      <div class="row" style="margin-top:8px"><span style="font:700 22px var(--f-mono);letter-spacing:.12em">${esc(CS.practice.invite_code||'')}</span><button class="btn sm primary" onclick="shareInvite()">Αποστολή link</button><button class="btn sm" onclick="copyInviteLink()">Αντιγραφή link</button><button class="btn sm ghost" onclick="newInvite()">Νέος κωδικός</button></div></div>`:''}
     <div class="row" style="margin-top:12px"><button class="btn" onclick="syncNow()">↻ Συγχρονισμός τώρα</button><button class="btn danger" onclick="cloudSignOut()">Αποσύνδεση</button></div>`;
   setSync(CS.status,CS.err);}
 const _renderSet=renderSet;renderSet=function(){_renderSet();renderCloud();renderGcal();renderImport();renderTeam();};
@@ -2398,11 +2405,15 @@ function openProf(){const ts=therapists(),f=therFilter(),t0=isoOf(new Date());
   const cnt=id=>DB.sessions.filter(s=>s.date===t0&&s.status!=='cancel'&&s.kind!=='activity'&&(id==='all'||sessBy(s)===id)).length;
   $('profList').innerHTML=ts.map(t=>`<button class="prof-row ${f===t.id?'on':''}" style="--prof:${t.color}" onclick="setProf('${t.id}')"><span class="av" style="background:${t.color};width:38px;height:38px;font-size:13px">${esc(tInit(t.name))}</span><span style="flex:1;min-width:0"><div>${esc(t.name)}${t.id===ME()?' <span class="pill info">εσύ</span>':''}</div><div class="sub">${cnt(t.id)} συνεδρίες σήμερα</div></span>${f===t.id?'✓':''}</button>`).join('')
     +(ts.length>1?`<button class="prof-row ${f==='all'?'on':''}" onclick="setProf('all')"><span class="av all" style="--c1:${ts[0]?.color};--c2:${ts[1]?.color};width:38px;height:38px">ΟΛ</span><span style="flex:1"><div>Όλοι μαζί</div><div class="sub">${cnt('all')} συνεδρίες σήμερα · κάθε κάρτα δείχνει ποιος την κάνει</div></span>${f==='all'?'✓':''}</button>`:'')
-    +(CLOUD_ON&&CS.practice?`<div class="card" style="background:var(--brand-soft);margin:6px 0 0"><b>＋ Πρόσθεσε θεραπευτή</b><div class="small" style="margin-top:4px">Ο νέος θεραπευτής ανοίγει το <b>healing-steps.vercel.app</b>, φτιάχνει λογαριασμό και γράφει αυτόν τον κωδικό πρόσκλησης. Μετά εμφανίζεται εδώ ως προφίλ.</div>
-      <div class="row" style="margin-top:8px"><span style="font:700 22px var(--f-mono);letter-spacing:.12em">${esc(CS.practice.invite_code||'')}</span><button class="btn sm" onclick="copyInvite()">Αντιγραφή</button>${navigator.share?`<button class="btn sm" onclick="shareInvite()">Αποστολή</button>`:''}</div>
+    +(CLOUD_ON&&CS.practice?`<div class="card" style="background:var(--brand-soft);margin:6px 0 0"><b>＋ Πρόσθεσε θεραπευτή</b><div class="small" style="margin-top:4px">Στείλε του το <b>link πρόσκλησης</b> (κουμπί «Αποστολή» ή «Αντιγραφή link»). Το ανοίγει, φτιάχνει λογαριασμό και μπαίνει αυτόματα στο ιατρείο. Μετά εμφανίζεται εδώ ως προφίλ.</div>
+      <div class="row" style="margin-top:8px"><span style="font:700 22px var(--f-mono);letter-spacing:.12em">${esc(CS.practice.invite_code||'')}</span><button class="btn sm" onclick="copyInviteLink()">Αντιγραφή link</button>${navigator.share?`<button class="btn sm primary" onclick="shareInvite()">Αποστολή</button>`:''}</div><div class="small muted" style="margin-top:6px;overflow-wrap:anywhere">${esc(inviteLink())}</div>
       <div class="small muted" style="margin-top:6px">${(CS.members||[]).length}/${CS.practice.max_members||3} χρήστες</div></div>`:'');
   openM('mProf');}
-function shareInvite(){const c=CS.practice?.invite_code||'';navigator.share({title:'Healing Steps',text:`Μπες στο Healing Steps: άνοιξε https://healing-steps.vercel.app , φτιάξε λογαριασμό και γράψε τον κωδικό πρόσκλησης ${c}`}).catch(()=>{});}
+const APP_SELF=location.origin+location.pathname;
+function inviteLink(){return `${APP_SELF}?invite=${encodeURIComponent(CS.practice?.invite_code||'')}`;}
+function inviteText(){const c=CS.practice?.invite_code||'';return `Πρόσκληση στο Healing Steps 👋\nΆνοιξε αυτό το link, φτιάξε λογαριασμό με το email σου και θα μπεις αυτόματα στο ιατρείο:\n${inviteLink()}\n(Κωδικός πρόσκλησης, αν σου ζητηθεί: ${c})`;}
+function shareInvite(){if(navigator.share)navigator.share({title:'Healing Steps',text:inviteText()}).catch(()=>{});else copyInviteLink();}
+function copyInviteLink(){const t=inviteText();try{navigator.clipboard.writeText(t).then(()=>toast('Το link πρόσκλησης αντιγράφηκε'),()=>toast(inviteLink()));}catch(e){toast(inviteLink());}}
 const _openSession=openSession;openSession=function(id,dateIso,clientId){_openSession(id,dateIso,clientId);const row=$('sByRow');if(!row)return;const ts=therapists(),show=ts.length>1&&isOwner();row.hidden=!show;
   if(show){const s=id?DB.sessions.find(x=>x.id===id):null;$('sBy').innerHTML=ts.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('');$('sBy').value=s?sessBy(s)||defBy():defBy();}};
 function setStaff(id,k,v){const st=Object.assign({},staffMap());st[id]=Object.assign({},st[id],{[k]:v});DB.settings.staff=st;save();render();renderTeam();}
