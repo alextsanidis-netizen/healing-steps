@@ -1,0 +1,4 @@
+-- Healing Steps schema (applied to project kjwnghqwynlshsuujzux)
+-- Tables: hs_practices, hs_members, hs_records (jsonb per record), RLS member-only,
+-- RPC: hs_create_practice, hs_join_practice, hs_new_invite_code; bucket healing-files (private, <practice_id>/<file_id>)
+-- See migration "healing_steps_schema" in the Supabase dashboard for the full SQL.
