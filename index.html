@@ -396,6 +396,10 @@ td .btn{padding:5px 10px;font-size:12px} td.right{white-space:nowrap}
 .cpick-enter{flex:none;font:600 11px var(--f-mono);color:var(--accent)}.cpick-none{padding:10px 4px;color:var(--muted);font-size:14px}
 .cpick-sel{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;background:var(--brand-soft);border:1px solid var(--accent);cursor:pointer;min-height:52px}
 .cpick-ok{flex:none;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--accent);color:#fff;font-weight:700}.cpick-chg{flex:none;font-size:13px;font-weight:600;color:var(--accent)}
+.mv-who{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:14px;background:var(--brand-soft);margin-bottom:6px}.mv-who span{font-size:13px;color:var(--muted)}
+.mv-chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}.mv-chips .chip{font:inherit;font-size:13px;font-weight:600;color:var(--text)}.mv-chips .chip.on{color:var(--on-brand)}.mv-chips .chip small{font-weight:400;opacity:.75}
+.mv-warn{margin-top:10px;padding:10px 12px;border-radius:12px;background:rgba(220,60,40,.12);color:var(--danger);font-size:14px}
+.mv-notify{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:14px;text-transform:none;letter-spacing:0;font-family:inherit}.mv-notify input{width:auto;margin:0}
 </style>
 </head>
 <body>
@@ -723,7 +727,7 @@ td .btn{padding:5px 10px;font-size:12px} td.right{white-space:nowrap}
     <label>Πλάνο / ασκήσεις για το σπίτι (P)</label><textarea id="sPlan"></textarea>
     </div>
     <div class="row" style="margin-top:16px;justify-content:space-between">
-      <div class="row"><button class="btn danger ghost" id="sDelete" onclick="deleteSession()" style="display:none">Διαγραφή</button><button class="btn danger ghost" id="sCancelBtn" onclick="quickCancel($('sId').value)" style="display:none">✕ Ακύρωση ραντεβού</button></div>
+      <div class="row"><button class="btn danger ghost" id="sDelete" onclick="deleteSession()" style="display:none">Διαγραφή</button><button class="btn ghost" id="sMoveBtn" onclick="quickMove($('sId').value)" style="display:none">⇄ Μετακίνηση</button><button class="btn danger ghost" id="sCancelBtn" onclick="quickCancel($('sId').value)" style="display:none">✕ Ακύρωση ραντεβού</button></div>
       <div class="row"><button class="btn" onclick="closeM('mSess')">Άκυρο</button><button class="btn primary" onclick="saveSession()">Αποθήκευση</button></div>
     </div>
   </div>
@@ -874,6 +878,27 @@ td .btn{padding:5px 10px;font-size:12px} td.right{white-space:nowrap}
 </div>
 
 <!-- ===== MODAL: ΕΡΩΤΗΣΗ ===== -->
+<!-- ===== MODAL: ΜΕΤΑΚΙΝΗΣΗ ΡΑΝΤΕΒΟΥ ===== -->
+<div class="modal-bg" id="mMove" onclick="if(event.target===this)closeM('mMove')">
+  <div class="modal" style="max-width:460px">
+    <div class="head"><h2>⇄ Μετακίνηση ραντεβού</h2><button class="btn sm ghost" onclick="closeM('mMove')">✕</button></div>
+    <input type="hidden" id="mvId">
+    <div id="mvWho" class="mv-who"></div>
+    <label>Νέα ημέρα</label>
+    <div class="mv-chips" id="mvDays"></div>
+    <input id="mvDate" type="date" onchange="mvRender()">
+    <label>Νέα ώρα</label>
+    <input id="mvTime" type="time" step="300" onchange="mvRender()" oninput="mvRender()">
+    <div class="small muted" id="mvFreeH" style="margin:8px 0 4px">Ελεύθερες ώρες</div>
+    <div class="mv-chips" id="mvFree"></div>
+    <div id="mvWarn" class="mv-warn" hidden></div>
+    <label class="mv-notify" id="mvNotifyRow"><input type="checkbox" id="mvNotify" checked> Ενημέρωση πελάτη με μήνυμα για τη νέα ώρα</label>
+    <div class="row" style="margin-top:14px;justify-content:flex-end">
+      <button class="btn" onclick="closeM('mMove')">Πίσω</button><button class="btn primary" id="mvOk" onclick="doMove()">Μετακίνηση</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-bg" id="mAsk" onclick="if(event.target===this)this._cancel&&this._cancel()">
   <div class="modal ask" role="dialog" aria-modal="true" aria-labelledby="askMsg">
     <h2 id="askTitle" hidden></h2>
@@ -1043,7 +1068,7 @@ function renderToday(){
       if(isAct){html+=`<div class="card" style="background:var(--bg)"><div class="sess ${s.status}" style="border-left-color:var(--muted)"><div class="time">${esc(s.time||'—')}</div><div style="flex:1">
           <div class="row" style="justify-content:space-between"><b style="font-size:16px">📌 ${esc(s.title)}</b><span class="pill gray">δραστηριότητα</span></div>
           <div class="small muted">${s.dur?s.dur+'λ':''}${s.note?' · '+esc(s.note):''}</div>${s.addr?`<div class="small" style="margin-top:4px">📍 ${esc(s.addr)}</div>`:''}
-          <div class="row noprint" style="gap:6px;margin-top:8px">${s.addr?`<a class="btn sm" target="_blank" href="${navLink(s.addr,pinLL(s))}">🧭 Πλοήγηση</a>`:''}${s.status==='planned'?`<a class="btn sm ghost" target="_blank" href="${gcalLink(s)}">📅</a><button class="btn sm ghost" style="color:var(--danger)" onclick="quickCancel('${s.id}')">✕</button>`:`<button class="btn sm ghost" onclick="quickRestore('${s.id}')">↺</button>`}<button class="btn sm ghost" onclick="openSession('${s.id}')">✎</button></div>
+          <div class="row noprint" style="gap:6px;margin-top:8px">${s.addr?`<a class="btn sm" target="_blank" href="${navLink(s.addr,pinLL(s))}">🧭 Πλοήγηση</a>`:''}${s.status==='planned'?`<a class="btn sm ghost" target="_blank" href="${gcalLink(s)}">📅</a><button class="btn sm ghost" onclick="quickMove('${s.id}')" title="Μετακίνηση">⇄</button><button class="btn sm ghost" style="color:var(--danger)" onclick="quickCancel('${s.id}')">✕</button>`:`<button class="btn sm ghost" onclick="quickRestore('${s.id}')">↺</button>`}<button class="btn sm ghost" onclick="openSession('${s.id}')">✎</button></div>
         </div></div></div>`;return;}
       html+=`<div class="card"><div class="sess ${s.status}">
         <div class="time">${esc(s.time||'—')}</div>
@@ -1059,7 +1084,7 @@ function renderToday(){
             ${c?.phone?`<a class="btn sm" href="tel:${phoneClean(c.phone)}">📞</a><a class="btn sm" href="${msgLink(c.phone,'')}">💬</a>`:''}
             ${s.status==='planned'?`<button class="btn sm primary" onclick="quickDone('${s.id}')">✓ Ολοκληρώθηκε</button>`:''}
             ${billable(s)&&!s.paid?`<button class="btn sm" onclick="quickPaid('${s.id}')">€ Πληρώθηκε</button>`:''}
-            ${s.status==='planned'?`<a class="btn sm ghost" target="_blank" href="${gcalLink(s)}" title="Προσθήκη στο Google Calendar">📅</a><button class="btn sm ghost" style="color:var(--danger)" onclick="quickCancel('${s.id}')" title="Ακύρωση">✕ Ακύρωση</button>`:''}
+            ${s.status==='planned'?`<a class="btn sm ghost" target="_blank" href="${gcalLink(s)}" title="Προσθήκη στο Google Calendar">📅</a><button class="btn sm ghost" onclick="quickMove('${s.id}')" title="Μετακίνηση σε άλλη μέρα/ώρα">⇄ Μετακίνηση</button><button class="btn sm ghost" style="color:var(--danger)" onclick="quickCancel('${s.id}')" title="Ακύρωση">✕ Ακύρωση</button>`:''}
             ${s.status==='cancel'?`<button class="btn sm ghost" onclick="quickRestore('${s.id}')">↺ Επαναφορά</button>`:''}
             <button class="btn sm ghost" onclick="openSession('${s.id}')">✎</button>
           </div>
@@ -1089,6 +1114,42 @@ async function quickCancel(id){const s=DB.sessions.find(x=>x.id===id);const c=cl
   save();render();if($('mView').classList.contains('open'))viewClient(s.clientId);if($('mSess').classList.contains('open'))closeM('mSess');toast(n>1?`Ακυρώθηκαν ${n} συνεδρίες`:'Ακυρώθηκε');}
 function quickRestore(id){const s=DB.sessions.find(x=>x.id===id);s.status='planned';save();render();toast('Επαναφέρθηκε');}
 
+
+/* ---- ΜΕΤΑΚΙΝΗΣΗ ΡΑΝΤΕΒΟΥ (άλλη μέρα/ώρα, ελεύθερες ώρες, έλεγχος επικάλυψης, ενημέρωση πελάτη) ---- */
+const mvHM=m=>`${String(Math.floor(m/60)%24).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+function mvLabel(s){return s.kind==='activity'?(s.title||'Δραστηριότητα'):cname(client(s.clientId));}
+function mvBusy(s,date){return DB.sessions.filter(x=>x.id!==s.id&&x.date===date&&x.status!=='cancel'&&x.time&&(!s.by||!x.by||x.by===s.by));}
+function mvClash(s,date,time){const st=mins(time),en=st+(+s.dur||50);return mvBusy(s,date).filter(x=>{const a=mins(x.time),b=a+(+x.dur||50);return st<b&&a<en;});}
+function quickMove(id){const s=DB.sessions.find(x=>x.id===id);if(!s)return;
+  $('mvId').value=id;const c=s.kind==='activity'?null:client(s.clientId);
+  $('mvWho').innerHTML=`<b>${esc(mvLabel(s))}</b><span>Τώρα: ${esc(fmtDL(s.date))}${s.time?' · '+esc(s.time):''} · ${+s.dur||50}′</span>`;
+  const today=new Date(),base=new Date(s.date+'T00:00'),add=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return isoOf(x);};
+  const opts=[['Σήμερα',isoOf(today)],['Αύριο',add(today,1)],['Μεθαύριο',add(today,2)],['+1 εβδ.',add(base,7)],['+2 εβδ.',add(base,14)]];
+  $('mvDays').innerHTML=opts.map(([l,d])=>`<button type="button" class="chip" data-d="${d}" onclick="$('mvDate').value='${d}';mvRender()">${l}<small> ${new Date(d+'T00:00').toLocaleDateString('el-GR',{weekday:'short',day:'numeric',month:'numeric'})}</small></button>`).join('');
+  $('mvDate').value=s.date;$('mvTime').value=s.time||'';
+  const ph=c&&c.phone;$('mvNotifyRow').hidden=!ph;$('mvNotify').checked=!!ph;
+  if(document.querySelector('#mSess.open'))closeM('mSess');
+  mvRender();openM('mMove');}
+function mvRender(){const s=DB.sessions.find(x=>x.id===$('mvId').value);if(!s)return;const d=$('mvDate').value,t=$('mvTime').value;
+  document.querySelectorAll('#mvDays .chip').forEach(b=>b.classList.toggle('on',b.dataset.d===d));
+  const dur=+s.dur||50,busy=mvBusy(s,d).map(x=>[mins(x.time),mins(x.time)+(+x.dur||50)]);
+  const wh=String(DB.settings.dayStart||'08:00'),we=String(DB.settings.dayEnd||'21:00');const free=[];
+  const nowM=d===isoOf(new Date())?new Date().getHours()*60+new Date().getMinutes():-1;
+  for(let m=mins(wh);m+dur<=mins(we);m+=30){if(m<=nowM)continue;if(!busy.some(([a,b])=>m<b&&a<m+dur))free.push(mvHM(m));}
+  $('mvFreeH').textContent=d?`Ελεύθερες ώρες · ${fmtDL(d)}`:'Ελεύθερες ώρες';
+  $('mvFree').innerHTML=free.length?free.slice(0,16).map(h=>`<button type="button" class="chip${h===t?' on':''}" onclick="$('mvTime').value='${h}';mvRender()">${h}</button>`).join(''):'<span class="small muted">Δεν υπάρχει ελεύθερο κενό αυτή τη μέρα.</span>';
+  const same=d===s.date&&t===(s.time||'');const cl=d&&t?mvClash(s,d,t):[];
+  $('mvWarn').hidden=!cl.length;$('mvWarn').innerHTML=cl.length?`⚠ Επικαλύπτεται με: ${cl.map(x=>`<b>${esc(x.time)}</b> ${esc(mvLabel(x))}`).join(', ')}`:'';
+  $('mvOk').disabled=!d||!t||same;$('mvOk').textContent=cl.length?'Μετακίνηση παρ’ όλα αυτά':'Μετακίνηση';}
+function doMove(){const s=DB.sessions.find(x=>x.id===$('mvId').value);if(!s)return;const d=$('mvDate').value,t=$('mvTime').value;if(!d||!t)return toast('Διάλεξε μέρα και ώρα');
+  const from={date:s.date,time:s.time||''};s.moved=(s.moved||[]).concat([{from:from.date+' '+from.time,to:d+' '+t,at:new Date().toISOString()}]).slice(-5);
+  s.date=d;s.time=t;if(s.status!=='planned'&&s.status!=='done')s.status='planned';save();closeM('mMove');
+  if(typeof calSel!=='undefined'&&view==='cal'){calSel=d;const nd=new Date(d+'T00:00');calY=nd.getFullYear();calM=nd.getMonth();}
+  render();if($('mView').classList.contains('open')&&s.clientId)viewClient(s.clientId);
+  toast(`Μετακινήθηκε: ${fmtD(d)} ${t}`);
+  const c=s.kind==='activity'?null:client(s.clientId);
+  if(c&&c.phone&&$('mvNotify').checked){const txt=`Καλησπέρα ${c.first||''}, το ραντεβού μας μεταφέρθηκε από ${fmtDL(from.date)}${from.time?' στις '+from.time:''} σε ${fmtDL(d)} στις ${t}. Αν δεν σας βολεύει, ενημερώστε με. ${DB.settings.name||''}`.trim();
+    const a=document.createElement('a');a.href=msgLink(c.phone,txt);a.target='_blank';a.rel='noopener';document.body.appendChild(a);a.click();a.remove();}}
 /* ---- ΗΜΕΡΟΛΟΓΙΟ ---- */
 let calY=new Date().getFullYear(),calM=new Date().getMonth(),calSel=isoOf(new Date());
 function calShift(n){calM+=n;if(calM<0){calM=11;calY--}if(calM>11){calM=0;calY++}renderCal();}
@@ -1109,7 +1170,7 @@ function renderCal(){
     if(s.kind==='activity')return `<div class="card clickable" style="background:var(--bg)" onclick="openSession('${s.id}')"><div class="sess ${s.status}" style="border-left-color:var(--muted)"><div class="time">${esc(s.time||'—')}</div><div style="flex:1"><b>📌 ${esc(s.title)}</b><div class="small muted">${s.dur?s.dur+'λ':''}${s.addr?' · 📍 '+esc(s.addr):''}</div></div></div></div>`;
     return `<div class="card clickable" onclick="openSession('${s.id}')"><div class="sess ${s.status}"><div class="time">${esc(s.time||'—')}</div>
       <div style="flex:1"><div class="row" style="justify-content:space-between"><b>${esc(cname(c))}${therTag(s)}</b><span class="pill ${st[1]}">${st[0]}</span></div>
-      <div class="small muted">${TYPE[s.type]||''} · ${s.dur}λ · ${money(s.fee)}${s.paid?' · πληρωμένη':''}</div></div><div class="row" style="gap:4px">${s.status==='planned'?`<a class="btn sm ghost" target="_blank" href="${gcalLink(s)}" onclick="event.stopPropagation()" title="Google Calendar">📅</a><button class="btn sm ghost" style="color:var(--danger)" onclick="event.stopPropagation();quickCancel('${s.id}')" title="Ακύρωση">✕</button>`:''}${s.status==='cancel'?`<button class="btn sm ghost" onclick="event.stopPropagation();quickRestore('${s.id}')" title="Επαναφορά">↺</button>`:''}</div></div></div>`;}).join('')
+      <div class="small muted">${TYPE[s.type]||''} · ${s.dur}λ · ${money(s.fee)}${s.paid?' · πληρωμένη':''}</div></div><div class="row" style="gap:4px">${s.status==='planned'?`<a class="btn sm ghost" target="_blank" href="${gcalLink(s)}" onclick="event.stopPropagation()" title="Google Calendar">📅</a><button class="btn sm ghost" onclick="event.stopPropagation();quickMove('${s.id}')" title="Μετακίνηση">⇄</button><button class="btn sm ghost" style="color:var(--danger)" onclick="event.stopPropagation();quickCancel('${s.id}')" title="Ακύρωση">✕</button>`:''}${s.status==='cancel'?`<button class="btn sm ghost" onclick="event.stopPropagation();quickRestore('${s.id}')" title="Επαναφορά">↺</button>`:''}</div></div></div>`;}).join('')
     :'<div class="card empty">Καμία συνεδρία.</div>';
 }
 
@@ -1560,7 +1621,7 @@ function cpickInit(id,clientId){const s=id?DB.sessions.find(x=>x.id===id):null;
   SESS_CL=DB.clients.filter(c=>c.status!=='closed'||c.id===s?.clientId).sort((a,b)=>cname(a).localeCompare(cname(b),'el'));
   if(!s&&!clientId){$('sClient').value='';sessClientChanged();if(!$('sId').value)$('sFeeI').value=DB.settings.fee;}
   $('sClientQ').value='';cpickRender();cpickShow();}
-const _openSessionCP=openSession;openSession=function(id,dateIso,clientId){_openSessionCP(id,dateIso,clientId);cpickInit(id,clientId);};
+const _openSessionCP=openSession;openSession=function(id,dateIso,clientId){_openSessionCP(id,dateIso,clientId);cpickInit(id,clientId);$('sMoveBtn').style.display=$('sCancelBtn').style.display;};
 function sessClientChanged(){const c=client($('sClient').value);if(!$('sId').value&&c?.fee)$('sFeeI').value=c.fee;const cr=c?credits(c.id):0;$('sPkgInfo').textContent=cr>0?`📦 υπόλοιπο προπληρωμής: ${cr}`:'';if(!$('sId').value)$('sPay').value=cr>0?'Πακέτο':'Μετρητά';
   const ds=c?docSummary(c.id,3,true):'';$('sDocsInfo').style.display=ds?'':'none';$('sDocsInfo').innerHTML=ds?`<b>📋 Έγγραφα πελάτη</b><br>${ds}`:'';}
 async function saveSession(){const id=$('sId').value;
