@@ -1689,8 +1689,18 @@ const blobToB64=b=>new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.
 async function exportJSON(){DB.settings.lastBackup=new Date().toISOString();save();const out=JSON.parse(JSON.stringify(DB));
   if($('sBackupFiles')?.checked){try{const fl=await dbAll();toast(`Πακετάρισμα ${fl.length} αρχείων…`);out.files=[];for(const f of fl)out.files.push({...f,blob:undefined,b64:await blobToB64(f.blob)});}catch(e){}}
   const b=new Blob([JSON.stringify(out)],{type:'application/json'});saveFile(`therapy-backup-${isoOf(new Date())}.json`,b);toast('Έγινε export');renderSet();}
-function importJSON(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>importData(r.result);r.readAsText(f);inp.value='';}
-async function importData(txt){try{const d=JSON.parse(txt);if(!d.clients||!d.sessions)throw 0;
+function importJSON(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{let t;try{t=new TextDecoder('utf-8').decode(new Uint8Array(r.result));}catch(e){t='';}importData(t);};r.readAsArrayBuffer(f);inp.value='';}
+/* επισκευή «αλαμπουρνέζικων»: ελληνικά UTF-8 που διαβάστηκαν κάπου ως Windows-1253 (π.χ. «Ξ‘Ξ½Ξ±») */
+const MOJI_RE=/[ΞΟ][\u0080-¿‘-›€ƒ΄-Ά™�]/;
+let _mojiMap=null;
+function mojiMap(){if(_mojiMap)return _mojiMap;const m=new Map();let dec=null;try{dec=new TextDecoder('windows-1253');}catch(e){}
+  for(let b=0x80;b<=0xff;b++){let c=String.fromCharCode(b);if(dec){const d=dec.decode(new Uint8Array([b]));if(d&&d!=='�')c=d;}m.set(c,b);if(!m.has(String.fromCharCode(b)))m.set(String.fromCharCode(b),b);}
+  m.set('�',0xaa);return _mojiMap=m;}
+function unMoji(s){if(typeof s!=='string'||!MOJI_RE.test(s))return s;const m=mojiMap(),out=[];
+  for(const ch of s){const c=ch.codePointAt(0);if(c<128){out.push(c);continue;}const b=m.get(ch);if(b===undefined)return s;out.push(b);}
+  try{return new TextDecoder('utf-8',{fatal:true}).decode(new Uint8Array(out));}catch(e){return s;}}
+function fixMoji(v){if(typeof v==='string')return unMoji(v);if(Array.isArray(v))return v.map(fixMoji);if(v&&typeof v==='object'){const o={};for(const k in v)o[unMoji(k)]=(k==='b64'?v[k]:fixMoji(v[k]));return o;}return v;}
+async function importData(txt){try{let d=JSON.parse(txt);if(!d.clients||!d.sessions)throw 0;if(MOJI_RE.test(txt)){d=fixMoji(d);toast('Διορθώθηκαν τα ελληνικά του αρχείου');}
   if(typeof CS!=='undefined'&&CS.practice){if(!(d.clients||[]).length)return toast('Δεν βρέθηκαν πελάτες στο αρχείο');
     if(!(DB.clients.length+DB.sessions.length+DB.expenses.length+(DB.packages||[]).length)){return fullRestore(d);}
     openMig({src:'json',d,files:d.files||[]});return;}
