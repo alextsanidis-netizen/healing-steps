@@ -2383,12 +2383,19 @@ const staffMap=()=>DB.settings.staff||{};
 const ME=()=>CLOUD_ON?(CS.user?.id||''):(DB.settings.me||'');
 const isOwner=()=>CLOUD_ON?CS.role==='owner':true;
 function therapists(){const st=staffMap();let list;
-  if(CLOUD_ON&&CS.practice)list=(CS.members||[]).filter(m=>st[m.user_id]?.ther!==false).map(m=>({id:m.user_id,name:st[m.user_id]?.name||(m.email||'').split('@')[0],email:m.email}));
+  if(CLOUD_ON&&CS.practice){list=(CS.members||[]).filter(m=>st[m.user_id]?.ther!==false).map(m=>({id:m.user_id,name:st[m.user_id]?.name||'',email:m.email}));
+    const ids=new Set(list.map(t=>t.id)),res=k=>{const x=byAlias(k);if(ids.has(x))return x;const mt=byAlias(DB.settings.mainTher||'');return ids.has(mt)?mt:ownerId();};
+    list.forEach(t=>{if(!t.name){const e=Object.entries(st).find(([k,v])=>!ids.has(k)&&v&&v.name&&v.ther!==false&&res(k)===t.id);t.name=e?e[1].name:(t.email||'').split('@')[0];}});}
   else list=Object.entries(st).filter(([,v])=>v&&v.ther!==false).map(([id,v])=>({id,name:v.name||'—'}));
   return list.map((t,i)=>({...t,color:st[t.id]?.color||T_COL[i%T_COL.length]}));}
-const sessBy=r=>(r&&r.by)||DB.settings.mainTher||'';
+/* αντιστοίχιση παλιών προφίλ (π.χ. IDs από τη μεταφορά) σε τωρινούς θεραπευτές */
+const byAlias=id=>{const m=DB.settings.byMap||{};let x=id;for(let i=0;i<4&&x&&m[x];i++)x=m[x];return x;};
+let _tsMemo={t:0,v:null};const tsIds=()=>{const n=Date.now();if(!_tsMemo.v||n-_tsMemo.t>300){_tsMemo={t:n,v:new Set(therapists().map(t=>t.id))};}return _tsMemo.v;};
+const ownerId=()=>(CS.members||[]).find(m=>m.role==='owner')?.user_id||'';
+const sessBy=r=>{const id=byAlias((r&&r.by)||DB.settings.mainTher||'');if(!CLOUD_ON||!CS.practice||!(CS.members||[]).length)return id;const ids=tsIds();if(ids.has(id))return id;const mt=byAlias(DB.settings.mainTher||'');return ids.has(mt)?mt:(ownerId()||id);};
+const rawBy=r=>(r&&r.by)||DB.settings.mainTher||'';
 const isTher=id=>therapists().some(t=>t.id===id);
-function therFilter(){const ts=therapists();if(ts.length<2&&isOwner())return 'all';if(!isOwner())return ME();
+function therFilter(){const ts=therapists();if(ts.length<2)return 'all';
   let f=null;try{f=localStorage.getItem('hs_prof');}catch(e){}if(f==='all'||ts.some(t=>t.id===f))return f;return isTher(ME())?ME():'all';}
 function inView(r){const f=therFilter();return f==='all'||sessBy(r)===f;}
 function defBy(){const f=therFilter();if(f!=='all')return f;if(isTher(ME()))return ME();return DB.settings.mainTher||therapists()[0]?.id||ME()||'';}
@@ -2396,7 +2403,7 @@ function selBy(existing){const row=$('sByRow'),el=$('sBy');if(row&&!row.hidden&&
 const tInit=n=>(n||'?').split(/\s+/).map(w=>w[0]||'').join('').slice(0,2).toUpperCase();
 function therTag(r){const ts=therapists();if(ts.length<2||therFilter()!=='all')return '';const t=ts.find(x=>x.id===sessBy(r));return t?`<span class="ttag" style="background:${t.color}">${esc(t.name.split(' ')[0])}</span>`:'';}
 function setProf(v){try{localStorage.setItem('hs_prof',v);}catch(e){}closeM('mProf');todayOffset=0;render();const t=therapists().find(x=>x.id===v);toast(v==='all'?'Όλοι οι θεραπευτές':'Προφίλ: '+(t?t.name:''));}
-function renderProf(){const b=$('profBtn');if(!b)return;const ts=therapists(),show=isOwner()&&ts.length>0&&((CLOUD_ON&&!!CS.practice)||ts.length>1);b.hidden=!show;document.body.classList.toggle('has-prof',show);const f=therFilter();
+function renderProf(){const b=$('profBtn');if(!b)return;const ts=therapists(),show=ts.length>0&&((CLOUD_ON&&!!CS.practice)||ts.length>1);b.hidden=!show;document.body.classList.toggle('has-prof',show);const f=therFilter();
   const t=ts.find(x=>x.id===f);document.documentElement.style.setProperty('--prof',ts.length>1&&t?t.color:'transparent');if(!show)return;
   const one=ts.length===1?ts[0]:null,tt=t||one;
   b.innerHTML=tt?`<span class="av" style="background:${tt.color}">${esc(tInit(tt.name))}</span><span class="n">${esc(tt.name.split(' ')[0])}</span>`
@@ -2414,16 +2421,24 @@ function inviteLink(){return `${APP_SELF}?invite=${encodeURIComponent(CS.practic
 function inviteText(){const c=CS.practice?.invite_code||'';return `Πρόσκληση στο Healing Steps 👋\nΆνοιξε αυτό το link, φτιάξε λογαριασμό με το email σου και θα μπεις αυτόματα στο ιατρείο:\n${inviteLink()}\n(Κωδικός πρόσκλησης, αν σου ζητηθεί: ${c})`;}
 function shareInvite(){if(navigator.share)navigator.share({title:'Healing Steps',text:inviteText()}).catch(()=>{});else copyInviteLink();}
 function copyInviteLink(){const t=inviteText();try{navigator.clipboard.writeText(t).then(()=>toast('Το link πρόσκλησης αντιγράφηκε'),()=>toast(inviteLink()));}catch(e){toast(inviteLink());}}
-const _openSession=openSession;openSession=function(id,dateIso,clientId){_openSession(id,dateIso,clientId);const row=$('sByRow');if(!row)return;const ts=therapists(),show=ts.length>1&&isOwner();row.hidden=!show;
+const _openSession=openSession;openSession=function(id,dateIso,clientId){_openSession(id,dateIso,clientId);const row=$('sByRow');if(!row)return;const ts=therapists(),show=ts.length>1;row.hidden=!show;
   if(show){const s=id?DB.sessions.find(x=>x.id===id):null;$('sBy').innerHTML=ts.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('');$('sBy').value=s?sessBy(s)||defBy():defBy();}};
 function setStaff(id,k,v){const st=Object.assign({},staffMap());st[id]=Object.assign({},st[id],{[k]:v});DB.settings.staff=st;save();render();renderTeam();}
 function setMainTher(v){DB.settings.mainTher=v;save();render();renderTeam();toast('Αποθηκεύτηκε');}
 function renderTeam(){const box=$('teamCard');if(!box)return;const ok=CLOUD_ON&&CS.practice&&isOwner();box.hidden=!ok;if(!ok)return;const st=staffMap(),ts=therapists();
-  box.innerHTML=`<h3 style="margin:0">👥 Θεραπευτές & προφίλ</h3><p class="small muted" style="margin:6px 0 10px">Κάθε θεραπευτής έχει δικό του πρόγραμμα, οικονομικά και έξοδα. Οι διαχειριστές αλλάζουν προφίλ από το κουμπί πάνω δεξιά· τα απλά μέλη βλέπουν μόνο το δικό τους. Οι πελάτες είναι κοινοί.</p>
+  box.innerHTML=`<h3 style="margin:0">👥 Θεραπευτές & προφίλ</h3><p class="small muted" style="margin:6px 0 10px">Κάθε θεραπευτής έχει δικό του πρόγραμμα, οικονομικά και έξοδα. Όλοι αλλάζουν προφίλ από το κουμπί πάνω αριστερά (π.χ. ο ένας βλέπει το πρόγραμμα του άλλου ή «Όλοι»). Οι πελάτες είναι κοινοί.</p>
     ${(CS.members||[]).map(m=>{const s=st[m.user_id]||{},t=ts.find(x=>x.id===m.user_id);return `<div class="list-item" style="display:block"><div class="row" style="gap:8px;flex-wrap:nowrap">${t?`<span class="av" style="background:${t.color}">${esc(tInit(t.name))}</span>`:'<span class="av" style="background:var(--muted)">—</span>'}<div style="min-width:0;flex:1"><div class="small muted" style="overflow-wrap:anywhere">${esc(m.email||'')} · ${m.role==='owner'?'διαχειριστής':'μέλος'}</div></div></div>
       <div class="grid2" style="margin-top:6px"><div><label>Όνομα στο προφίλ</label><input value="${esc(s.name||(m.email||'').split('@')[0])}" onchange="setStaff('${m.user_id}','name',this.value.trim())"></div>
       <div class="check" style="align-self:end;margin:0 0 10px"><input type="checkbox" id="ther_${m.user_id}" ${s.ther!==false?'checked':''} onchange="setStaff('${m.user_id}','ther',this.checked)"><label for="ther_${m.user_id}" style="margin:0">Κάνει συνεδρίες</label></div></div></div>`;}).join('')}
-    <label for="mainTher">Ό,τι παλιό δεν έχει θεραπευτή ανήκει στον</label><select id="mainTher" onchange="setMainTher(this.value)">${ts.map(t=>`<option value="${t.id}" ${sessBy({})===t.id?'selected':''}>${esc(t.name)}</option>`).join('')}</select>`;}
+    <label for="mainTher">Ό,τι παλιό δεν έχει θεραπευτή ανήκει στον</label><select id="mainTher" onchange="setMainTher(this.value)">${ts.map(t=>`<option value="${t.id}" ${sessBy({})===t.id?'selected':''}>${esc(t.name)}</option>`).join('')}</select>${renderOldProfiles(ts)}`;}
+function renderOldProfiles(ts){const ids=new Set(ts.map(t=>t.id)),st=staffMap(),cnt={};
+  [...DB.sessions,...DB.expenses].forEach(r=>{const k=r.by||'';if(!k||ids.has(k))return;cnt[k]=cnt[k]||{s:0,a:0,e:0};if(r.kind==='activity')cnt[k].a++;else if(DB.expenses.includes(r))cnt[k].e++;else cnt[k].s++;});
+  const mt=DB.settings.mainTher;if(mt&&!ids.has(mt)&&!cnt[mt])cnt[mt]={s:0,a:0,e:0};
+  const keys=Object.keys(cnt);if(!keys.length)return '';
+  return `<div style="margin-top:14px"><b>Παλιά προφίλ από τη μεταφορά</b><div class="small muted" style="margin:4px 0 6px">Στην παλιά εφαρμογή οι θεραπευτές είχαν άλλα IDs. Διάλεξε σε ποιον ανήκει το καθένα — αλλάζει αμέσως σε όλες τις συσκευές.</div>
+  ${keys.map(k=>{const c=cnt[k],nm=st[k]?.name;return `<div class="list-item" style="display:block"><div class="small"><b>${esc(nm||'Χωρίς όνομα')}</b> · ${c.s} συνεδρίες${c.a?` · ${c.a} δραστηριότητες`:''}${c.e?` · ${c.e} έξοδα`:''}${k===mt?' · «κύριος» παλιός':''}</div>
+    <select style="margin-top:6px" onchange="setByMap('${k}',this.value)">${ts.map(t=>`<option value="${t.id}" ${sessBy({by:k})===t.id?'selected':''}>→ ${esc(t.name)}</option>`).join('')}</select></div>`;}).join('')}</div>`;}
+function setByMap(oldId,newId){const m=Object.assign({},DB.settings.byMap||{});m[oldId]=newId;DB.settings.byMap=m;_tsMemo.v=null;save();render();renderTeam();toast('Αποθηκεύτηκε');}
 const _renderAll=render;render=function(){renderProf();_renderAll();};
 
 /* ---- Google Calendar: κοινό ημερολόγιο ιατρείου (γράφει ο server, άμεσα σε κάθε αλλαγή) ---- */
