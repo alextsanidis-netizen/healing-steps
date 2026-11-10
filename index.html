@@ -671,7 +671,7 @@ td .btn{padding:5px 10px;font-size:12px} td.right{white-space:nowrap}
     <div class="chips" style="margin-bottom:6px"><span class="chip on" id="kindSess" onclick="setKind('session')">🧑‍⚕️ Συνεδρία</span><span class="chip" id="kindAct" onclick="setKind('activity')">📌 Δραστηριότητα (γυμναστήριο, προσωπικό, προμήθειες…)</span></div>
     <div id="sByRow" hidden><label for="sBy">Θεραπευτής</label><select id="sBy"></select></div>
     <div id="sessFields">
-    <label>Πελάτης *</label><select id="sClient" onchange="sessClientChanged()"></select>
+    <label for="sClientQ">Πελάτης *</label><input id="sClientQ" type="search" placeholder="🔍 Αναζήτηση: όνομα, επώνυμο ή τηλέφωνο" autocomplete="off" enterkeyhint="done" oninput="filterSessClients()" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}" style="margin-bottom:6px"><select id="sClient" onchange="sessClientChanged();sessPickDone()"></select><div id="sClientNone" class="small muted" hidden style="margin-top:4px">Δεν βρέθηκε πελάτης με αυτό το όνομα.</div>
     <div id="sDocsInfo" class="small" style="display:none;margin-top:6px;padding:8px 10px;background:var(--brand-soft);border-radius:10px"></div>
     </div>
     <div id="actFields" style="display:none">
@@ -1512,6 +1512,7 @@ function openSession(id,dateIso,clientId){const s=id?DB.sessions.find(x=>x.id===
   $('mSessTitle').textContent=s?'Επεξεργασία συνεδρίας':'Νέα συνεδρία';$('sDelete').style.display=s?'':'none';$('sCancelBtn').style.display=s&&s.status==='planned'?'':'none';$('repeatBox').style.display=s?'none':'';
   const cl=DB.clients.filter(c=>c.status!=='closed'||c.id===s?.clientId).sort((a,b)=>(a.last+a.first).localeCompare(b.last+b.first,'el'));
   $('sClient').innerHTML=cl.map(c=>`<option value="${c.id}">${esc(cname(c))}</option>`).join('')||'<option value="">— κανένας πελάτης —</option>';
+  SESS_CL=cl;$('sClientQ').value='';$('sClient').size=1;$('sClientNone').hidden=true;
   setKind(s?.kind==='activity'?'activity':'session');$('aTitle').value=s?.title||'';$('aAddr').value=s?.addr||'';$('aNote').value=s?.note||'';
   $('sId').value=s?.id||'';$('sClient').value=s?.clientId||clientId||cl[0]?.id||'';
   $('sDate').value=s?.date||dateIso||isoOf(new Date());$('sTime').value=s?.time||'';
@@ -1521,6 +1522,18 @@ function openSession(id,dateIso,clientId){const s=id?DB.sessions.find(x=>x.id===
   $('sSubj').value=s?.subj||'';$('sObs').value=s?.obs||'';$('sInt').value=s?.int||'';$('sPlan').value=s?.plan||'';
   {const c=client($('sClient').value);const cr=c?credits(c.id):0;$('sPkgInfo').textContent=cr>0?`📦 υπόλοιπο προπληρωμής: ${cr}`:'';const ds=c?docSummary(c.id,3,true):'';$('sDocsInfo').style.display=ds?'':'none';$('sDocsInfo').innerHTML=ds?`<b>📋 Έγγραφα πελάτη</b><br>${ds}`:'';}
   openM('mSess');}
+/* αναζήτηση πελάτη στη φόρμα συνεδρίας (χωρίς τόνους, ς=σ, ονοματεπώνυμο με οποιαδήποτε σειρά, τηλέφωνο) */
+let SESS_CL=[];
+const foldGr=t=>String(t||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/ς/g,'σ');
+function filterSessClients(){const sel=$('sClient'),q=foldGr($('sClientQ').value).trim(),prev=sel.value;
+  const toks=q.split(/\s+/).filter(Boolean);
+  const list=!toks.length?SESS_CL:SESS_CL.filter(c=>{const hay=foldGr(cname(c)+' '+(c.first||'')+' '+(c.last||'')+' '+(c.phone||'')+' '+String(c.phone||'').replace(/\D/g,''));return toks.every(t=>hay.includes(t));});
+  sel.innerHTML=list.map(c=>`<option value="${c.id}">${esc(cname(c))}${toks.length&&c.phone?' · '+esc(c.phone):''}</option>`).join('');
+  $('sClientNone').hidden=!(toks.length&&!list.length);
+  sel.size=toks.length&&list.length>1?Math.min(6,list.length):1;
+  if(list.some(c=>c.id===prev))sel.value=prev;else if(list[0])sel.value=list[0].id;
+  if(sel.value!==prev)sessClientChanged();}
+function sessPickDone(){const sel=$('sClient');if(sel.size>1){const v=sel.value;$('sClientQ').value='';filterSessClients();sel.value=v;sel.size=1;}}
 function sessClientChanged(){const c=client($('sClient').value);if(!$('sId').value&&c?.fee)$('sFeeI').value=c.fee;const cr=c?credits(c.id):0;$('sPkgInfo').textContent=cr>0?`📦 υπόλοιπο προπληρωμής: ${cr}`:'';if(!$('sId').value)$('sPay').value=cr>0?'Πακέτο':'Μετρητά';
   const ds=c?docSummary(c.id,3,true):'';$('sDocsInfo').style.display=ds?'':'none';$('sDocsInfo').innerHTML=ds?`<b>📋 Έγγραφα πελάτη</b><br>${ds}`:'';}
 async function saveSession(){const id=$('sId').value;
@@ -1529,7 +1542,7 @@ async function saveSession(){const id=$('sId').value;
     if(!a.date)return toast('Βάλε ημερομηνία');if(old&&old.addr!==addr){a.ll=null;if(DB.legs)for(const k in DB.legs)if(k.split('|').includes(id))delete DB.legs[k];}
     if(old)Object.assign(old,a);else{DB.sessions.push({id:uid(),...a});const rep=+$('sRepeat').value,n=+$('sRepeatN').value||0;if(rep>0)for(let i=1;i<n;i++)DB.sessions.push({id:uid(),...a,date:addDays(a.date,rep*i)});}
     save();closeM('mSess');toast('Αποθηκεύτηκε');render();return;}
-  if(!$('sClient').value){toast('Πρόσθεσε πρώτα έναν πελάτη');return openClient();}
+  if(!$('sClient').value){if($('sClientQ').value.trim()&&SESS_CL.length){toast('Διάλεξε πελάτη από την αναζήτηση');return $('sClientQ').focus();}toast('Πρόσθεσε πρώτα έναν πελάτη');return openClient();}
   const base={by:selBy(id&&DB.sessions.find(x=>x.id===id)),clientId:$('sClient').value,date:$('sDate').value,time:$('sTime').value,dur:+$('sDurI').value||0,type:$('sType').value,status:$('sStatus').value,fee:+$('sFeeI').value||0,paid:$('sPaid').checked,pay:$('sPay').value,mood:curMood>=0?curMood:'',subj:$('sSubj').value,obs:$('sObs').value,int:$('sInt').value,plan:$('sPlan').value};
   if(!base.date)return toast('Βάλε ημερομηνία');
   if(!id||DB.sessions.find(x=>x.id===id)?.date!==base.date||DB.sessions.find(x=>x.id===id)?.time!==base.time){
