@@ -401,6 +401,7 @@ td .btn{padding:5px 10px;font-size:12px} td.right{white-space:nowrap}
 .mv-warn{margin-top:10px;padding:10px 12px;border-radius:12px;background:rgba(220,60,40,.12);color:var(--danger);font-size:14px}
 .mv-notify{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:14px;text-transform:none;letter-spacing:0;font-family:inherit}.mv-notify input{width:auto;margin:0}
 .auth-invite{margin:12px 0 0;padding:10px 12px;border-radius:12px;background:var(--brand-soft);font-size:14px;line-height:1.4}.auth-invite code{font:700 13px var(--f-mono);letter-spacing:.08em}
+.k-link-box{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
 </style>
 </head>
 <body>
@@ -802,6 +803,7 @@ td .btn{padding:5px 10px;font-size:12px} td.right{white-space:nowrap}
     <div class="check"><input type="checkbox" id="kQ" checked><label for="kQ" style="margin:0">Φυσιοθεραπευτικό ιστορικό</label></div>
     <div id="kPinBox"><label for="kPin">Κωδικός εξόδου (4 ψηφία — τον ξέρεις μόνο εσύ)</label><input id="kPin" type="password" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="••••"></div>
     <div class="row" style="margin-top:14px;justify-content:flex-end"><button class="btn" onclick="closeM('mKiosk')">Άκυρο</button><button class="btn primary" onclick="startKiosk()">Κλείδωμα & παράδοση</button></div>
+    <div id="kLinkBox" class="k-link-box"><div class="small muted">ή, πριν πας για θεραπεία:</div><button class="btn" style="width:100%;margin-top:6px" onclick="makeIntake()">🔗 Στείλε link να τα συμπληρώσει από το κινητό του</button><div class="small muted" style="margin-top:6px">Μία χρήση · ισχύει 7 μέρες · βλέπει μόνο τη δική του φόρμα. Ο κωδικός εξόδου δεν χρειάζεται.</div></div>
   </div>
 </div>
 
@@ -897,6 +899,16 @@ td .btn{padding:5px 10px;font-size:12px} td.right{white-space:nowrap}
     <div class="row" style="margin-top:14px;justify-content:flex-end">
       <button class="btn" onclick="closeM('mMove')">Πίσω</button><button class="btn primary" id="mvOk" onclick="doMove()">Μετακίνηση</button>
     </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: LINK ΣΥΜΠΛΗΡΩΣΗΣ ===== -->
+<div class="modal-bg" id="mIntake" onclick="if(event.target===this)closeM('mIntake')">
+  <div class="modal" style="max-width:480px">
+    <div class="head"><h2>🔗 Link συμπλήρωσης</h2><button class="btn sm ghost" onclick="closeM('mIntake')">✕</button></div>
+    <div id="inBody"></div>
+    <h3 style="margin:18px 0 6px;font-size:15px">Πρόσφατα links</h3>
+    <div id="inList" class="small muted">Φόρτωση…</div>
   </div>
 </div>
 
@@ -2219,7 +2231,7 @@ async function cloudPush(){if(!CS.practice)return;if(CS.busy){clearTimeout(CS.pu
 /* ---- λήψη αλλαγών (realtime + κάθε λεπτό + όταν ανοίγει η εφαρμογή) ---- */
 function applyRow(r){if(r.kind==='settings'){if(!r.deleted&&r.data){const keep={};LOCAL_SETTINGS.forEach(k=>keep[k]=DB.settings[k]);DB.settings=Object.assign({},DB.settings,r.data,keep);for(const k in _holCache)delete _holCache[k];}return;}
   if(r.kind==='meta'){if(r.id==='legs')DB.legs=r.deleted?{}:(r.data||{});return;}
-  const arr=DB[r.kind]=DB[r.kind]||[];const i=arr.findIndex(x=>x.id===r.id);
+  const arr=DB[r.kind]=DB[r.kind]||[];const i=arr.findIndex(x=>x.id===r.id);if(r.kind==='clients'&&!CS.fresh&&r.data?.intakeAt&&(i<0||arr[i].intakeAt!==r.data.intakeAt))setTimeout(()=>toast(`📲 ${cname(r.data)} συμπλήρωσε τη φόρμα online`),400);
   if(r.deleted||!r.data){if(i>=0)arr.splice(i,1);}else if(i>=0)arr[i]=r.data;else arr.push(r.data);}
 async function cloudPull(full){if(!CS.practice||!navigator.onLine)return 0;
   const since=(!full&&CS.cursor)?new Date(new Date(CS.cursor).getTime()-5000).toISOString():null;let rows=[],from=0;
@@ -2338,19 +2350,21 @@ const _saveSettings=saveSettings;saveSettings=async function(){const old=+DB.set
 SET_IDS.forEach(id=>{const e=$(id);if(e)e.addEventListener('change',()=>saveSettings());});
 
 /* ================= ΛΕΙΤΟΥΡΓΙΑ ΠΕΛΑΤΗ: το tablet δείχνει μόνο τη φόρμα του πελάτη ================= */
+let INTAKE=null;
+(function(){try{const t=new URL(location.href).searchParams.get('f');if(t&&/^[A-Za-z0-9_-]{16,64}$/.test(t))INTAKE={token:t,S:null,sent:false};}catch(e){}})();
 const KIOSK_KEY='hs_kiosk';
-const kState=()=>{try{return JSON.parse(localStorage.getItem(KIOSK_KEY));}catch(e){return null;}};
-const kSet=v=>{try{v?localStorage.setItem(KIOSK_KEY,JSON.stringify(v)):localStorage.removeItem(KIOSK_KEY);}catch(e){}};
+const kState=()=>{if(INTAKE)return INTAKE.S;try{return JSON.parse(localStorage.getItem(KIOSK_KEY));}catch(e){return null;}};
+const kSet=v=>{if(INTAKE){INTAKE.S=v;return;}try{v?localStorage.setItem(KIOSK_KEY,JSON.stringify(v)):localStorage.removeItem(KIOSK_KEY);}catch(e){}};
 const inKiosk=()=>document.body.classList.contains('kiosk');
 function openKioskStart(cid){const cl=DB.clients.filter(c=>c.status!=='closed'||c.id===cid).sort((a,b)=>cname(a).localeCompare(cname(b),'el'));
   $('kWho').innerHTML=`<option value="">＋ Νέος πελάτης</option>`+cl.map(c=>`<option value="${c.id}">${esc(cname(c))}</option>`).join('');$('kWho').value=cid||'';
-  $('kPinBox').hidden=!!DB.settings.kioskPin;$('kPin').value='';openM('mKiosk');}
+  $('kPinBox').hidden=!!DB.settings.kioskPin;$('kPin').value='';$('kLinkBox').hidden=!(CLOUD_ON&&CS.practice);openM('mKiosk');}
 function startKiosk(){if(!DB.settings.kioskPin){const p=$('kPin').value.trim();if(!/^\d{4,6}$/.test(p))return toast('Βάλε κωδικό εξόδου 4–6 ψηφίων');DB.settings.kioskPin=p;save();}
   const info=$('kInfo').checked,q=$('kQ').checked;if(!info&&!q)return toast('Διάλεξε τουλάχιστον ένα');
   let cid=$('kWho').value,isNew=false;if(!cid){cid='k'+uid();isNew=true;}
   kSet({cid,isNew,info:info||isNew,q,done:{},at:Date.now()});closeM('mKiosk');enterKiosk();}
 function enterKiosk(){const S=kState();if(!S)return;document.querySelectorAll('.modal-bg.open').forEach(m=>m.classList.remove('open'));document.body.classList.add('kiosk');$('kioskExit').hidden=false;window.scrollTo(0,0);renderKiosk();}
-function renderKiosk(){const S=kState();if(!S)return;const c=client(S.cid);const steps=[];
+function renderKiosk(){if(INTAKE)return renderIntake();const S=kState();if(!S)return;const c=client(S.cid);const steps=[];
   if(S.info)steps.push(['info','👤','Τα στοιχεία σας','Όνομα, τηλέφωνο, διεύθυνση, επαφή έκτακτης ανάγκης']);
   if(S.q)steps.push(['q','🩺','Ιατρικό ιστορικό','Πόνος, ιστορικό, φάρμακα, αλλεργίες — περίπου 10 λεπτά']);
   const allDone=steps.every(s=>S.done[s[0]]);
@@ -2375,8 +2389,67 @@ const _kView=viewClient;viewClient=function(...a){if(inKiosk())return;return _kV
 const _kGo=go;go=function(v){if(inKiosk())return;return _kGo(v);};
 const _kCmd=typeof openCmd==='function'?openCmd:null;if(_kCmd)openCmd=function(...a){if(inKiosk())return;return _kCmd(...a);};
 const _kOpenSession=openSession;openSession=function(...a){if(inKiosk())return;return _kOpenSession(...a);};
-if(kState())setTimeout(enterKiosk,0);
+if(!INTAKE&&kState())setTimeout(enterKiosk,0);
 
+
+/* ================= LINK ΜΙΑΣ ΧΡΗΣΗΣ: ο πελάτης συμπληρώνει στοιχεία/ιστορικό από το κινητό του ================= */
+const IN_ERR={invalid:'Το link δεν είναι έγκυρο ή ακυρώθηκε.',used:'Αυτό το link έχει ήδη χρησιμοποιηθεί. Ευχαριστούμε!',expired:'Το link έχει λήξει. Ζητήστε νέο από τον θεραπευτή σας.',missing_name:'Συμπληρώστε όνομα και επώνυμο.',too_large:'Η φόρμα είναι πολύ μεγάλη.'};
+const inErr=m=>{for(const k in IN_ERR)if(String(m||'').includes(k))return IN_ERR[k];return /fetch|network/i.test(m||'')?'Δεν υπάρχει σύνδεση στο internet.':(m||'Σφάλμα');};
+const intakeUrl=t=>`${location.origin+location.pathname}?f=${t}`;
+async function makeIntake(){if(!(CLOUD_ON&&CS.practice))return toast('Χρειάζεται σύνδεση στο cloud');
+  const info=$('kInfo').checked,q=$('kQ').checked;if(!info&&!q)return toast('Διάλεξε τουλάχιστον ένα');
+  let cid=$('kWho').value,isNew=!cid,label='';
+  if(isNew){label=await askText('Όνομα του νέου πελάτη (μόνο για να τον αναγνωρίζεις — το συμπληρώνει κι ο ίδιος)','',{title:'Νέος πελάτης',ok:'Δημιουργία link'});if(label===null)return;cid='k'+uid();}
+  else label=cname(client(cid));
+  const sections=[];if(info||isNew)sections.push('info');if(q)sections.push('q');
+  const {data,error}=await sb.from('hs_intakes').insert({practice_id:CS.practice.id,client_id:cid,is_new:isNew,label:label||null,sections}).select('token,expires_at').single();
+  if(error)return toast('Σφάλμα: '+error.message);
+  closeM('mKiosk');openIntake({token:data.token,cid,label,expires_at:data.expires_at,sections});}
+function intakeMsg(x){const c=client(x.cid),first=c?.first||'';const what=x.sections.includes('q')&&x.sections.includes('info')?'τα στοιχεία και το ιστορικό σας':x.sections.includes('q')?'το ιστορικό σας':'τα στοιχεία σας';
+  return `Καλησπέρα${first?' '+first:''}! Πριν από τη συνεδρία μας, συμπληρώστε ${what} εδώ (λίγα λεπτά, από το κινητό σας):\n${intakeUrl(x.token)}\nΤο link ισχύει 7 μέρες και μόνο για εσάς.${DB.settings.name?'\n'+DB.settings.name:''}`;}
+function openIntake(x){const c=client(x.cid),url=intakeUrl(x.token);INTAKE_CUR=x;
+  $('inBody').innerHTML=`<div class="mv-who"><b>${esc(x.label||'Νέος πελάτης')}</b><span>${x.sections.map(s=>s==='q'?'Ιστορικό':'Στοιχεία').join(' + ')} · ισχύει έως ${esc(fmtD(String(x.expires_at).slice(0,10)))} · μία χρήση</span></div>
+    <input readonly value="${esc(url)}" onclick="this.select()" style="margin-top:8px;font-size:13px">
+    <div class="row" style="margin-top:10px;gap:8px;flex-wrap:wrap">${c?.phone?`<a class="btn primary" href="${esc(msgLink(c.phone,intakeMsg(x)))}" target="_blank" rel="noopener">📱 Αποστολή στο ${esc(c.phone)}</a>`:''}
+      ${navigator.share?`<button class="btn ${c?.phone?'':'primary'}" onclick="navigator.share({text:intakeMsg(INTAKE_CUR)}).catch(()=>{})">Κοινοποίηση…</button>`:''}
+      <button class="btn" onclick="copyText(intakeMsg(INTAKE_CUR),'Το μήνυμα με το link αντιγράφηκε')">Αντιγραφή</button></div>
+    <div class="small muted" style="margin-top:8px">Μόλις το συμπληρώσει, τα στοιχεία μπαίνουν αυτόματα στην καρτέλα του${c?'':' (ως νέος πελάτης)'}.</div>`;
+  openM('mIntake');loadIntakes();}
+let INTAKE_CUR=null;
+function copyText(t,msg){try{navigator.clipboard.writeText(t).then(()=>toast(msg||'Αντιγράφηκε'),()=>toast('Δεν έγινε αντιγραφή'));}catch(e){toast('Δεν έγινε αντιγραφή');}}
+async function loadIntakes(){const box=$('inList');if(!box||!(CLOUD_ON&&CS.practice))return;
+  const {data,error}=await sb.from('hs_intakes').select('token,client_id,label,sections,created_at,expires_at,used_at,revoked').eq('practice_id',CS.practice.id).order('created_at',{ascending:false}).limit(12);
+  if(error){box.textContent='—';return;}if(!data.length){box.textContent='Δεν υπάρχουν ακόμα.';return;}
+  const now=new Date();box.innerHTML=data.map(r=>{const st=r.used_at?`✅ Συμπληρώθηκε ${fmtD(r.used_at.slice(0,10))}`:r.revoked?'✕ Ακυρώθηκε':new Date(r.expires_at)<now?'⌛ Έληξε':'⏳ Αναμονή';const pend=!r.used_at&&!r.revoked&&new Date(r.expires_at)>=now;
+    return `<div class="list-item" style="display:flex;gap:8px;align-items:center"><div style="flex:1;min-width:0"><b>${esc(r.label||client(r.client_id)&&cname(client(r.client_id))||'Νέος πελάτης')}</b><div class="small muted">${st} · στάλθηκε ${fmtD(r.created_at.slice(0,10))}</div></div>
+      ${pend?`<button class="btn sm ghost" onclick="openIntake({token:'${r.token}',cid:'${esc(r.client_id)}',label:${esc(JSON.stringify(r.label||''))},expires_at:'${r.expires_at}',sections:${esc(JSON.stringify(r.sections))}})">Link</button><button class="btn sm ghost" style="color:var(--danger)" onclick="revokeIntake('${r.token}')">Ακύρωση</button>`:''}
+      ${r.used_at&&client(r.client_id)?`<button class="btn sm ghost" onclick="closeM('mIntake');viewClient('${esc(r.client_id)}')">Καρτέλα</button>`:''}</div>`;}).join('');}
+async function revokeIntake(t){if(!await ask('Να ακυρωθεί το link; Ο πελάτης δεν θα μπορεί πια να το ανοίξει.',{title:'Ακύρωση link',ok:'Ακύρωση link'}))return;
+  const {error}=await sb.from('hs_intakes').update({revoked:true}).eq('token',t);if(error)return toast('Σφάλμα: '+error.message);toast('Το link ακυρώθηκε');loadIntakes();}
+
+/* --- πλευρά πελάτη (?f=TOKEN): χωρίς σύνδεση, χωρίς αποθήκευση στη συσκευή, βλέπει μόνο τη φόρμα του --- */
+function intakeCard(inner){return `<div class="kiosk-card"><span class="lockup" role="img" aria-label="healing steps"><img class="sym" src="${EMBLEM}" alt="" aria-hidden="true"><span>healing steps.</span></span>${inner}</div>`;}
+async function intakeBoot(){save=function(){};document.querySelectorAll('.modal-bg.open').forEach(m=>m.classList.remove('open'));document.body.classList.add('kiosk','intake');$('kioskExit').hidden=true;
+  $('kiosk').innerHTML=intakeCard('<h1>Φόρτωση…</h1>');
+  if(!CLOUD_ON||typeof sb==='undefined'){$('kiosk').innerHTML=intakeCard('<h1>Δεν ήταν δυνατή η σύνδεση</h1><p class="muted">Ελέγξτε το internet και ανοίξτε ξανά το link.</p>');return;}
+  let r;try{r=await sb.rpc('hs_intake_get',{p_token:INTAKE.token});}catch(e){r={error:e};}
+  if(r.error){$('kiosk').innerHTML=intakeCard(`<h1>Ωχ!</h1><p class="muted" style="margin:0">${esc(inErr(r.error.message))}</p>`);return;}
+  const d=r.data;['clients','sessions','packages','docs','expenses','files'].forEach(k=>DB[k]=[]);
+  if(!d.is_new)DB.clients.push({...(d.client||{}),id:d.client_id,status:'active'});
+  INTAKE.practice=d.practice||'';INTAKE.S={cid:d.client_id,isNew:d.is_new,info:d.sections.includes('info')||d.is_new,q:d.sections.includes('q'),done:{},at:Date.now()};
+  window.scrollTo(0,0);renderKiosk();}
+function renderIntake(){const S=INTAKE.S;if(!S)return;const c=client(S.cid);
+  if(INTAKE.sent){$('kiosk').innerHTML=intakeCard(`<h1>Ευχαριστούμε${c?.first?', '+esc(c.first):''}! ✓</h1><p class="muted" style="margin:0">Τα στοιχεία σας στάλθηκαν στον θεραπευτή σας. Μπορείτε να κλείσετε αυτή τη σελίδα.</p>`);return;}
+  const steps=[];if(S.info)steps.push(['info','👤','Τα στοιχεία σας','Όνομα, τηλέφωνο, διεύθυνση, επαφή έκτακτης ανάγκης']);
+  if(S.q)steps.push(['q','🩺','Ιατρικό ιστορικό','Πόνος, ιστορικό, φάρμακα, αλλεργίες — περίπου 10 λεπτά']);
+  const allDone=steps.every(s=>S.done[s[0]]);
+  $('kiosk').innerHTML=intakeCard(`<h1>Καλώς ήρθατε${c?.first?', '+esc(c.first):''}</h1><p class="muted" style="margin:0">Πριν από τη συνεδρία σας${INTAKE.practice?' στο '+esc(INTAKE.practice):''}, συμπληρώστε τα παρακάτω. Ό,τι γράψετε το βλέπει μόνο ο θεραπευτής σας.</p>
+    ${steps.map(([k,ic,t,sub],i)=>{const dis=k==='q'&&!c;return `<button class="kiosk-step ${S.done[k]?'done':''}" ${dis?'disabled style="opacity:.5"':''} onclick="kioskOpen('${k}')"><span class="ic">${S.done[k]?'✓':ic}</span><span style="flex:1">${i+1}. ${t}<span class="sub">${S.done[k]?'Έτοιμο — πατήστε για αλλαγές':dis?'Συμπληρώστε πρώτα τα στοιχεία σας':sub}</span></span></button>`;}).join('')}
+    ${allDone?`<button class="btn primary" id="inSend" style="width:100%;margin-top:14px;min-height:52px;font-size:16px" onclick="intakeSend()">📨 Αποστολή στον θεραπευτή</button><div class="small muted" style="margin-top:6px;text-align:center">Μετά την αποστολή το link κλείνει.</div>`:''}`);}
+async function intakeSend(){const c=client(INTAKE.S.cid);if(!c)return;const b=$('inSend');if(b){b.disabled=true;b.textContent='Αποστολή…';}
+  let r;try{r=await sb.rpc('hs_intake_submit',{p_token:INTAKE.token,p_data:c});}catch(e){r={error:e};}
+  if(r.error){toast(inErr(r.error.message));if(b){b.disabled=false;b.textContent='📨 Αποστολή στον θεραπευτή';}if(/used|expired|invalid/.test(r.error.message||'')){$('kiosk').innerHTML=intakeCard(`<h1>Ωχ!</h1><p class="muted" style="margin:0">${esc(inErr(r.error.message))}</p>`);}return;}
+  INTAKE.sent=true;renderKiosk();}
 /* ================= ΠΡΟΦΙΛ ΘΕΡΑΠΕΥΤΩΝ: κοινοί πελάτες, ξεχωριστό πρόγραμμα/οικονομικά ================= */
 const T_COL=['#2a8cf0','#7c5cff','#0f9d6b','#e0457b','#0891b2'];
 const staffMap=()=>DB.settings.staff||{};
@@ -2482,11 +2555,11 @@ async function cloudBoot(){if(!CLOUD_ON){const d=$('syncDot');if(d)d.hidden=true
 /* ================= INIT ================= */
 window.addEventListener('error',e=>{try{toast('⚠️ Σφάλμα: '+(e.message||'').slice(0,80));}catch(x){}});
 applyTheme();
-if(DB.settings.pin){$('lock').classList.add('open');setTimeout(()=>$('lockPin').focus(),100);}
+if(DB.settings.pin&&!INTAKE){$('lock').classList.add('open');setTimeout(()=>$('lockPin').focus(),100);}
 render();
 // backup reminder: αν πέρασαν 14+ μέρες από τελευταίο export και υπάρχουν δεδομένα
-cloudBoot();
-(()=>{const lb=DB.settings.lastBackup;if(!DB.demo&&DB.sessions.length>5&&(!lb||Date.now()-new Date(lb)>14*864e5))setTimeout(()=>toast('💾 Θύμισε: κάνε export αντιγράφου ασφαλείας'),2500);})();
+if(INTAKE)intakeBoot();else cloudBoot();
+(()=>{if(INTAKE)return;const lb=DB.settings.lastBackup;if(!DB.demo&&DB.sessions.length>5&&(!lb||Date.now()-new Date(lb)>14*864e5))setTimeout(()=>toast('💾 Θύμισε: κάνε export αντιγράφου ασφαλείας'),2500);})();
 </script>
 </body>
 </html>
